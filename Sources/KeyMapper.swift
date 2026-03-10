@@ -32,7 +32,8 @@ enum KeyMapper {
 
     /// Translate keyCode using the CURRENT keyboard layout via UCKeyTranslate.
     /// Fixes stale input source issue after switching input methods.
-    static func currentLayoutCharacter(keyCode: Int) -> String? {
+    /// Translate keyCode using the CURRENT keyboard layout via UCKeyTranslate.
+    static func currentLayoutCharacter(keyCode: Int, shift: Bool, capsLock: Bool = false) -> String? {
         guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue() else {
             return nil
         }
@@ -44,6 +45,10 @@ enum KeyMapper {
         guard let bytePtr = CFDataGetBytePtr(layoutData) else { return nil }
         let dataLength = CFDataGetLength(layoutData)
 
+        var modState: UInt32 = 0
+        if shift    { modState |= 2 }  // shiftKey >> 8
+        if capsLock { modState |= 4 }  // alphaLockKey >> 8
+
         var deadKeyState: UInt32 = 0
         var chars = [UniChar](repeating: 0, count: 4)
         var actualLength: Int = 0
@@ -53,7 +58,7 @@ enum KeyMapper {
                 keyboardLayout,
                 UInt16(keyCode),
                 UInt16(kUCKeyActionDown),
-                0,
+                modState,
                 UInt32(LMGetKbdType()),
                 UInt32(kUCKeyTranslateNoDeadKeysBit),
                 &deadKeyState,
@@ -72,32 +77,40 @@ enum KeyMapper {
     }
 
     static func displayText(keyCode: Int, flags: CGEventFlags, characters: String?) -> (modifiers: String, key: String) {
-        let modifiers = modifierSymbols(for: flags)
+        let hasShift = flags.contains(.maskShift)
+        let hasCmd   = flags.contains(.maskCommand)
+        let hasCtrl  = flags.contains(.maskControl)
+        let hasOpt   = flags.contains(.maskAlternate)
+        let hasOtherModifiers = hasCmd || hasCtrl || hasOpt
 
+        // Special keys: show all modifiers + symbol
         if isSpecialKey(keyCode) {
-            return (modifiers, keyName(for: keyCode))
+            return (modifierSymbols(for: flags), keyName(for: keyCode))
         }
 
-        // 1. UCKeyTranslate with CURRENT layout (always up-to-date after input source switch)
-        if let layoutChar = currentLayoutCharacter(keyCode: keyCode), !layoutChar.isEmpty {
-            if layoutChar.count == 1, let c = layoutChar.first, c.isASCII, c.isLetter {
-                return (modifiers, layoutChar.uppercased())
-            }
-            return (modifiers, layoutChar)
+        // Build modifier string:
+        // Shift-only → reflected in character case, don't show ⇧
+        // Shift + others → show ⇧ as symbol
+        var modifiers = ""
+        if hasCtrl  { modifiers += "⌃" }
+        if hasOpt   { modifiers += "⌥" }
+        if hasShift && hasOtherModifiers { modifiers += "⇧" }
+        if hasCmd   { modifiers += "⌘" }
+
+        // Get character with shift/capsLock applied for correct case
+        let hasCapsLock = flags.contains(.maskAlphaShift)
+        let key: String
+        if let layoutChar = currentLayoutCharacter(keyCode: keyCode, shift: hasShift, capsLock: hasCapsLock), !layoutChar.isEmpty {
+            key = layoutChar
+        } else if let chars = characters,
+                  !chars.isEmpty,
+                  chars.unicodeScalars.first.map({ $0.value >= 32 && $0.value != 127 }) == true {
+            key = chars
+        } else {
+            key = keyName(for: keyCode)
         }
 
-        // 2. Fallback: CGEvent's Unicode string (for IMEs without layout data)
-        if let chars = characters,
-           !chars.isEmpty,
-           chars.unicodeScalars.first.map({ $0.value >= 32 && $0.value != 127 }) == true {
-            if chars.count == 1, let c = chars.first, c.isASCII, c.isLetter {
-                return (modifiers, chars.uppercased())
-            }
-            return (modifiers, chars)
-        }
-
-        // 3. Final fallback: static key code mapping
-        return (modifiers, keyName(for: keyCode))
+        return (modifiers, key)
     }
 
     // MARK: - Special keys
