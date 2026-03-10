@@ -30,9 +30,9 @@ swiftc \
 xattr -cr "$APP_BUNDLE"
 codesign --force --sign - --identifier "$BUNDLE_ID" "$APP_BUNDLE"
 
-# Install to /Applications
+# Install to /Applications (keep build copy for packaging)
+rm -rf "/Applications/$APP_NAME.app"
 cp -R "$APP_BUNDLE" /Applications/
-rm -rf "$APP_BUNDLE"
 
 echo "✅ Build complete & installed to /Applications/$APP_NAME.app"
 echo "Run with: open /Applications/$APP_NAME.app"
