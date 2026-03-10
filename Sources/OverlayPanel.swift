@@ -8,8 +8,8 @@ class OverlayPanel: NSPanel {
     init(viewModel: KeystrokeViewModel) {
         self.viewModel = viewModel
 
-        let panelWidth: CGFloat = 400
-        let panelHeight: CGFloat = 260
+        let panelWidth: CGFloat = 290
+        let panelHeight: CGFloat = 90
 
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),

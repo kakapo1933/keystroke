@@ -1,76 +1,45 @@
 import SwiftUI
 import Combine
 
-struct KeystrokeEntry: Identifiable, Equatable {
-    let id = UUID()
-    var text: String
-    var timestamp: Date
-    var isCombo: Bool
-
-    static func == (lhs: KeystrokeEntry, rhs: KeystrokeEntry) -> Bool {
-        lhs.id == rhs.id && lhs.text == rhs.text
-    }
-}
-
 class KeystrokeViewModel: ObservableObject {
-    @Published var entries: [KeystrokeEntry] = []
+    /// 修飾鍵 slots [左, 右]，右對齊填入
+    @Published var modifierSlots: [String?] = [nil, nil]
+    /// 主鍵 slots [左, 右]，滾動緩衝，新鍵從右推入
+    @Published var keySlots: [String?] = [nil, nil]
     @Published var isEditing: Bool = false
 
-    private let maxEntries = 5
+    private var fadeWorkItem: DispatchWorkItem?
     private let fadeDelay: TimeInterval = 2.0
-    private let combineThreshold: TimeInterval = 0.5
 
     func addKeystroke(keyCode: Int, flags: CGEventFlags, characters: String? = nil) {
-        let (modifiers, key) = KeyMapper.displayText(keyCode: keyCode, flags: flags, characters: characters)
+        let allKeys = KeyMapper.displayKeys(keyCode: keyCode, flags: flags, characters: characters)
 
-        let hasModifiers = !modifiers.isEmpty
-        let displayText = hasModifiers ? "\(modifiers) \(key)" : key
+        // 最後一個元素永遠是主鍵
+        let mainKey = allKeys.last!
+        let modifiers = Array(allKeys.dropLast())
 
-        let now = Date()
+        // 修飾鍵：右對齊，最多取最後 2 個
+        let mods = Array(modifiers.suffix(2))
+        modifierSlots[0] = mods.count == 2 ? mods[0] : nil
+        modifierSlots[1] = mods.count >= 1 ? mods[mods.count - 1] : nil
 
-        // Combine rapid sequential keystrokes without modifiers
-        if !hasModifiers,
-           !entries.isEmpty,
-           !entries[entries.count - 1].isCombo,
-           now.timeIntervalSince(entries[entries.count - 1].timestamp) < combineThreshold {
-            entries[entries.count - 1].text += key
-            entries[entries.count - 1].timestamp = now
-            scheduleFadeout(for: entries[entries.count - 1].id)
-            return
-        }
+        // 主鍵：滾動緩衝
+        keySlots[0] = keySlots[1]
+        keySlots[1] = mainKey
 
-        let entry = KeystrokeEntry(text: displayText, timestamp: now, isCombo: hasModifiers)
-        entries.append(entry)
-
-        // Trim old entries
-        if entries.count > maxEntries {
-            entries.removeFirst(entries.count - maxEntries)
-        }
-
-        scheduleFadeout(for: entry.id)
+        scheduleFadeout()
     }
 
-    private func scheduleFadeout(for id: UUID) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + fadeDelay) { [weak self] in
-            guard let self = self else { return }
-            guard let index = self.entries.firstIndex(where: { $0.id == id }) else { return }
-
-            let elapsed = Date().timeIntervalSince(self.entries[index].timestamp)
-            if elapsed >= self.fadeDelay - 0.1 {
-                _ = withAnimation(.easeOut(duration: 0.3)) {
-                    self.entries.remove(at: index)
-                }
-            } else {
-                let remaining = self.fadeDelay - elapsed + 0.05
-                DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self] in
-                    guard let self = self else { return }
-                    if let idx = self.entries.firstIndex(where: { $0.id == id }) {
-                        _ = withAnimation(.easeOut(duration: 0.3)) {
-                            self.entries.remove(at: idx)
-                        }
-                    }
-                }
+    private func scheduleFadeout() {
+        fadeWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.modifierSlots = [nil, nil]
+                self.keySlots = [nil, nil]
             }
         }
+        fadeWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + fadeDelay, execute: item)
     }
 }

@@ -2,7 +2,7 @@
 set -e
 
 APP_NAME="KeyStroke"
-VERSION="0.1.0"
+VERSION="0.2.0"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 DMG_NAME="$APP_NAME-$VERSION.dmg"

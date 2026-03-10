@@ -3,17 +3,6 @@ import CoreGraphics
 
 enum KeyMapper {
 
-    // MARK: - Modifier symbols (standard macOS order: ⌃⌥⇧⌘)
-
-    static func modifierSymbols(for flags: CGEventFlags) -> String {
-        var symbols = ""
-        if flags.contains(.maskControl)   { symbols += "⌃" }
-        if flags.contains(.maskAlternate)  { symbols += "⌥" }
-        if flags.contains(.maskShift)      { symbols += "⇧" }
-        if flags.contains(.maskCommand)    { symbols += "⌘" }
-        return symbols
-    }
-
     // MARK: - Key name from keycode
 
     static func keyName(for keyCode: Int) -> String {
@@ -76,41 +65,40 @@ enum KeyMapper {
         return result
     }
 
-    static func displayText(keyCode: Int, flags: CGEventFlags, characters: String?) -> (modifiers: String, key: String) {
+    static func displayKeys(keyCode: Int, flags: CGEventFlags, characters: String?) -> [String] {
         let hasShift = flags.contains(.maskShift)
         let hasCmd   = flags.contains(.maskCommand)
         let hasCtrl  = flags.contains(.maskControl)
         let hasOpt   = flags.contains(.maskAlternate)
         let hasOtherModifiers = hasCmd || hasCtrl || hasOpt
 
-        // Special keys: show all modifiers + symbol
-        if isSpecialKey(keyCode) {
-            return (modifierSymbols(for: flags), keyName(for: keyCode))
-        }
+        // Build modifier array (standard macOS order: ⌃⌥⇧⌘)
+        var keys: [String] = []
+        if hasCtrl  { keys.append("⌃") }
+        if hasOpt   { keys.append("⌥") }
+        // Special keys: always show ⇧; normal keys: only show ⇧ when combined with other modifiers
+        if hasShift && (hasOtherModifiers || isSpecialKey(keyCode)) { keys.append("⇧") }
+        if hasCmd   { keys.append("⌘") }
 
-        // Build modifier string:
-        // Shift-only → reflected in character case, don't show ⇧
-        // Shift + others → show ⇧ as symbol
-        var modifiers = ""
-        if hasCtrl  { modifiers += "⌃" }
-        if hasOpt   { modifiers += "⌥" }
-        if hasShift && hasOtherModifiers { modifiers += "⇧" }
-        if hasCmd   { modifiers += "⌘" }
-
-        // Get character with shift/capsLock applied for correct case
-        let hasCapsLock = flags.contains(.maskAlphaShift)
+        // Resolve the main key
         let key: String
-        if let layoutChar = currentLayoutCharacter(keyCode: keyCode, shift: hasShift, capsLock: hasCapsLock), !layoutChar.isEmpty {
-            key = layoutChar
-        } else if let chars = characters,
-                  !chars.isEmpty,
-                  chars.unicodeScalars.first.map({ $0.value >= 32 && $0.value != 127 }) == true {
-            key = chars
-        } else {
+        if isSpecialKey(keyCode) {
             key = keyName(for: keyCode)
+        } else {
+            let hasCapsLock = flags.contains(.maskAlphaShift)
+            if let layoutChar = currentLayoutCharacter(keyCode: keyCode, shift: hasShift, capsLock: hasCapsLock), !layoutChar.isEmpty {
+                key = layoutChar
+            } else if let chars = characters,
+                      !chars.isEmpty,
+                      chars.unicodeScalars.first.map({ $0.value >= 32 && $0.value != 127 }) == true {
+                key = chars
+            } else {
+                key = keyName(for: keyCode)
+            }
         }
 
-        return (modifiers, key)
+        keys.append(key)
+        return keys
     }
 
     // MARK: - Special keys
