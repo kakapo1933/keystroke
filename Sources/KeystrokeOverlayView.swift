@@ -42,6 +42,8 @@ struct KeystrokeOverlayView: View {
             .padding(.horizontal, horizontalPadding)
         }
         .frame(width: panelWidth, height: panelHeight)
+        .contentShape(Rectangle())
+        .background(viewModel.isEditing ? Color.black.opacity(0.001) : Color.clear)
         .overlay(
             Group {
                 if viewModel.isEditing {

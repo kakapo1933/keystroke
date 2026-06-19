@@ -37,6 +37,7 @@ class OverlayPanel: NSPanel {
 
         restoreSavedPositionOrDefault()
         observePreferenceChanges()
+        observeWindowMoves()
         orderFrontRegardless()
     }
 
@@ -97,6 +98,15 @@ class OverlayPanel: NSPanel {
                 DispatchQueue.main.async {
                     self?.resizeForCurrentPreferences()
                 }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func observeWindowMoves() {
+        NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: self)
+            .sink { [weak self] _ in
+                guard let self, self.isDraggable else { return }
+                self.preferences.saveOverlayOrigin(self.frame.origin)
             }
             .store(in: &cancellables)
     }
