@@ -147,7 +147,13 @@ private struct SettingsPreviewStrip: View {
     @ObservedObject var preferences: KeystrokePreferences
 
     private let modifiers = ["⌃", "⌥", "⇧", "⌘"]
-    private let keys = ["K", "E", "Y", "⏎", "⌫", "↑", "F5", "⌘"]
+    private let keys = [
+        KeyDisplayToken.volumeDown,
+        KeyDisplayToken.volumeUp,
+        KeyDisplayToken.playPause,
+        KeyDisplayToken.previousTrack,
+        KeyDisplayToken.nextTrack
+    ]
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {

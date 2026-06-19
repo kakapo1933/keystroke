@@ -71,11 +71,11 @@ enum KeyMapper {
     static func mediaKeyName(for keyType: Int) -> String? {
         switch keyType {
         case NXKeyType.soundUp:
-            return "🔊"
+            return KeyDisplayToken.volumeUp
         case NXKeyType.soundDown:
-            return "🔉"
+            return KeyDisplayToken.volumeDown
         case NXKeyType.mute:
-            return "🔇"
+            return KeyDisplayToken.mute
         case NXKeyType.brightnessUp:
             return "☀︎+"
         case NXKeyType.brightnessDown:
@@ -97,15 +97,15 @@ enum KeyMapper {
         case NXKeyType.videoMirror:
             return "▣"
         case NXKeyType.play:
-            return "▶︎"
+            return KeyDisplayToken.playPause
         case NXKeyType.next:
-            return "⏭"
+            return KeyDisplayToken.nextTrack
         case NXKeyType.previous:
-            return "⏮"
+            return KeyDisplayToken.previousTrack
         case NXKeyType.fast:
-            return "⏩"
+            return KeyDisplayToken.fastForward
         case NXKeyType.rewind:
-            return "⏪"
+            return KeyDisplayToken.rewind
         case NXKeyType.illuminationUp:
             return "⌨︎+"
         case NXKeyType.illuminationDown:

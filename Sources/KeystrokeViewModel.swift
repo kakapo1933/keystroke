@@ -62,7 +62,13 @@ class KeystrokeViewModel: ObservableObject {
 
     func showPreview() {
         modifierKeys = Array(["⌃", "⌥", "⇧", "⌘"].suffix(preferences.visibleModifierCount))
-        recentKeys = Array(["K", "E", "Y", "⏎", "⌫", "↑", "F5", "⌘"].suffix(preferences.visibleKeyCount))
+        recentKeys = Array([
+            KeyDisplayToken.volumeDown,
+            KeyDisplayToken.volumeUp,
+            KeyDisplayToken.playPause,
+            KeyDisplayToken.previousTrack,
+            KeyDisplayToken.nextTrack
+        ].suffix(preferences.visibleKeyCount))
         scheduleFadeout()
     }
 
