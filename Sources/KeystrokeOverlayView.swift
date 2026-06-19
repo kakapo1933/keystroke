@@ -118,16 +118,12 @@ struct KeyCapView: View {
             .frame(width: keySize, height: keySize)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color.white.opacity(preferences.keyBackgroundOpacity))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(preferences.keyBackgroundOpacity))
+                            .strokeBorder(Color.white.opacity(borderOpacity), lineWidth: 1)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.24), radius: 5, y: 2)
+                    .shadow(color: .black.opacity(shadowOpacity), radius: 5, y: 2)
             )
     }
 
@@ -137,5 +133,13 @@ struct KeyCapView: View {
 
     private var fontSize: CGFloat {
         max(16, keySize * 0.44)
+    }
+
+    private var borderOpacity: Double {
+        0.18 + preferences.keyBackgroundOpacity * 0.24
+    }
+
+    private var shadowOpacity: Double {
+        0.10 + preferences.keyBackgroundOpacity * 0.14
     }
 }

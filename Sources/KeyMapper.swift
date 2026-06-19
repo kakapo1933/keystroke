@@ -12,13 +12,23 @@ enum KeyMapper {
         static let brightnessUp = 2
         static let brightnessDown = 3
         static let capsLock = 4
+        static let help = 5
         static let mute = 7
+        static let numLock = 10
+        static let contrastUp = 11
+        static let contrastDown = 12
+        static let launchPanel = 13
+        static let eject = 14
+        static let videoMirror = 15
         static let play = 16
         static let next = 17
         static let previous = 18
+        static let fast = 19
+        static let rewind = 20
         static let illuminationUp = 21
         static let illuminationDown = 22
         static let illuminationToggle = 23
+        static let menu = 25
     }
 
     // MARK: - Key name from keycode
@@ -34,12 +44,22 @@ enum KeyMapper {
     }
 
     static func mediaKeyName(from event: CGEvent) -> String? {
-        guard let nsEvent = NSEvent(cgEvent: event),
-              nsEvent.subtype.rawValue == auxControlButtonsSubtype else {
+        guard let nsEvent = NSEvent(cgEvent: event) else {
+            return nil
+        }
+        return mediaKeyName(from: nsEvent)
+    }
+
+    static func mediaKeyName(from event: NSEvent) -> String? {
+        guard event.type == .systemDefined,
+              event.subtype.rawValue == auxControlButtonsSubtype else {
             return nil
         }
 
-        let data = nsEvent.data1
+        return mediaKeyName(fromData1: event.data1)
+    }
+
+    private static func mediaKeyName(fromData1 data: Int) -> String? {
         let keyType = (data & 0xFFFF0000) >> 16
         let keyFlags = data & 0x0000FFFF
         let keyState = (keyFlags & 0xFF00) >> 8
@@ -62,18 +82,38 @@ enum KeyMapper {
             return "☀︎-"
         case NXKeyType.capsLock:
             return "⇪"
+        case NXKeyType.help:
+            return "Help"
+        case NXKeyType.numLock:
+            return "Num"
+        case NXKeyType.contrastUp:
+            return "◐+"
+        case NXKeyType.contrastDown:
+            return "◐-"
+        case NXKeyType.launchPanel:
+            return "▦"
+        case NXKeyType.eject:
+            return "⏏"
+        case NXKeyType.videoMirror:
+            return "▣"
         case NXKeyType.play:
             return "▶︎"
         case NXKeyType.next:
             return "⏭"
         case NXKeyType.previous:
             return "⏮"
+        case NXKeyType.fast:
+            return "⏩"
+        case NXKeyType.rewind:
+            return "⏪"
         case NXKeyType.illuminationUp:
             return "⌨︎+"
         case NXKeyType.illuminationDown:
             return "⌨︎-"
         case NXKeyType.illuminationToggle:
             return "⌨︎"
+        case NXKeyType.menu:
+            return "☰"
         default:
             return nil
         }
@@ -81,6 +121,16 @@ enum KeyMapper {
 
     static func isSpecialKey(_ keyCode: Int) -> Bool {
         specialKeys[keyCode] != nil
+    }
+
+    static func canDisplayKeyDown(keyCode: Int, characters: String?) -> Bool {
+        if specialKeys[keyCode] != nil || alphanumericKeys[keyCode] != nil {
+            return true
+        }
+
+        return characters?.unicodeScalars.contains { scalar in
+            scalar.value >= 32 && scalar.value != 127
+        } == true
     }
 
     /// Translate keyCode using the CURRENT keyboard layout via UCKeyTranslate.
