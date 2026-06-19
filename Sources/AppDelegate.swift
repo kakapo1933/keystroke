@@ -6,6 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayPanel: OverlayPanel!
     private var monitor: KeystrokeMonitor!
     private var viewModel: KeystrokeViewModel!
+    private var preferences: KeystrokePreferences!
     private var isVisible = true
     private var isLocked = true
 
@@ -15,6 +16,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func log(_ msg: String) {
         let line = "[\(Date())] \(msg)\n"
         if let data = line.data(using: .utf8) {
+            try? FileManager.default.createDirectory(
+                at: logFile.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             if FileManager.default.fileExists(atPath: logFile.path) {
                 if let handle = try? FileHandle(forWritingTo: logFile) {
                     handle.seekToEndOfFile()
@@ -30,8 +35,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("App launched")
 
-        viewModel = KeystrokeViewModel()
-        overlayPanel = OverlayPanel(viewModel: viewModel)
+        preferences = KeystrokePreferences()
+        viewModel = KeystrokeViewModel(preferences: preferences)
+        overlayPanel = OverlayPanel(viewModel: viewModel, preferences: preferences)
         setupStatusBar()
 
         let trusted = AXIsProcessTrusted()

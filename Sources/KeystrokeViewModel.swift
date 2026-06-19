@@ -2,14 +2,42 @@ import SwiftUI
 import Combine
 
 class KeystrokeViewModel: ObservableObject {
-    /// 修飾鍵 slots [左, 右]，右對齊填入
-    @Published var modifierSlots: [String?] = [nil, nil]
-    /// 主鍵 slots [左, 右]，滾動緩衝，新鍵從右推入
-    @Published var keySlots: [String?] = [nil, nil]
+    let preferences: KeystrokePreferences
+
+    @Published private var modifierKeys: [String] = []
+    @Published private var recentKeys: [String] = []
     @Published var isEditing: Bool = false
 
     private var fadeWorkItem: DispatchWorkItem?
-    private let fadeDelay: TimeInterval = 2.0
+    private var cancellables = Set<AnyCancellable>()
+
+    init(preferences: KeystrokePreferences) {
+        self.preferences = preferences
+
+        preferences.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.objectWillChange.send()
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    var modifierSlots: [String?] {
+        guard preferences.showModifiers, preferences.visibleModifierCount > 0 else {
+            return []
+        }
+
+        let visibleModifiers = Array(modifierKeys.suffix(preferences.visibleModifierCount))
+        let emptyCount = max(preferences.visibleModifierCount - visibleModifiers.count, 0)
+        return Array(repeating: nil, count: emptyCount) + visibleModifiers.map(Optional.some)
+    }
+
+    var keySlots: [String?] {
+        let visibleKeys = Array(recentKeys.suffix(preferences.visibleKeyCount))
+        let emptyCount = max(preferences.visibleKeyCount - visibleKeys.count, 0)
+        return Array(repeating: nil, count: emptyCount) + visibleKeys.map(Optional.some)
+    }
 
     func addKeystroke(keyCode: Int, flags: CGEventFlags, characters: String? = nil) {
         let allKeys = KeyMapper.displayKeys(keyCode: keyCode, flags: flags, characters: characters)
@@ -18,15 +46,16 @@ class KeystrokeViewModel: ObservableObject {
         let mainKey = allKeys.last!
         let modifiers = Array(allKeys.dropLast())
 
-        // 修飾鍵：右對齊，最多取最後 2 個
-        let mods = Array(modifiers.suffix(2))
-        modifierSlots[0] = mods.count == 2 ? mods[0] : nil
-        modifierSlots[1] = mods.count >= 1 ? mods[mods.count - 1] : nil
+        modifierKeys = Array(modifiers.suffix(preferences.visibleModifierCount))
+        recentKeys.append(mainKey)
+        recentKeys = Array(recentKeys.suffix(preferences.visibleKeyCount))
 
-        // 主鍵：滾動緩衝
-        keySlots[0] = keySlots[1]
-        keySlots[1] = mainKey
+        scheduleFadeout()
+    }
 
+    func showPreview() {
+        modifierKeys = Array(["⌃", "⌥", "⇧", "⌘"].suffix(preferences.visibleModifierCount))
+        recentKeys = Array(["K", "E", "Y", "⏎", "⌫", "↑", "F5", "⌘"].suffix(preferences.visibleKeyCount))
         scheduleFadeout()
     }
 
@@ -35,11 +64,11 @@ class KeystrokeViewModel: ObservableObject {
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             withAnimation(.easeOut(duration: 0.3)) {
-                self.modifierSlots = [nil, nil]
-                self.keySlots = [nil, nil]
+                self.modifierKeys = []
+                self.recentKeys = []
             }
         }
         fadeWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + fadeDelay, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + preferences.fadeDelay, execute: item)
     }
 }
