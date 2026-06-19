@@ -3,10 +3,13 @@ import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
+    private var toggleOverlayItem: NSMenuItem!
+    private var lockItem: NSMenuItem!
     private var overlayPanel: OverlayPanel!
     private var monitor: KeystrokeMonitor!
     private var viewModel: KeystrokeViewModel!
     private var preferences: KeystrokePreferences!
+    private var settingsWindow: NSWindow?
     private var isVisible = true
     private var isLocked = true
 
@@ -86,19 +89,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        let toggleItem = NSMenuItem(
+        toggleOverlayItem = NSMenuItem(
             title: "Hide Overlay",
             action: #selector(toggleOverlay),
             keyEquivalent: "h"
         )
-        menu.addItem(toggleItem)
+        menu.addItem(toggleOverlayItem)
 
-        let lockItem = NSMenuItem(
+        lockItem = NSMenuItem(
             title: "Unlock Position",
             action: #selector(toggleLock),
             keyEquivalent: "l"
         )
         menu.addItem(lockItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        menu.addItem(NSMenuItem(
+            title: "Preview Keys",
+            action: #selector(previewKeys),
+            keyEquivalent: "p"
+        ))
+
+        menu.addItem(NSMenuItem(
+            title: "Reset Position",
+            action: #selector(resetPosition),
+            keyEquivalent: "r"
+        ))
+
+        menu.addItem(NSMenuItem(
+            title: "Settings...",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        ))
+
+        menu.addItem(NSMenuItem(
+            title: "Accessibility...",
+            action: #selector(openAccessibilitySettings),
+            keyEquivalent: ""
+        ))
 
         menu.addItem(NSMenuItem.separator())
 
@@ -126,5 +155,65 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isLocked.toggle()
         overlayPanel.setLocked(isLocked)
         sender.title = isLocked ? "Unlock Position" : "Lock Position"
+    }
+
+    @objc private func openSettings(_ sender: NSMenuItem) {
+        showSettingsWindow()
+    }
+
+    @objc private func previewKeys(_ sender: NSMenuItem) {
+        showOverlayIfNeeded()
+        viewModel.showPreview()
+    }
+
+    @objc private func resetPosition(_ sender: NSMenuItem) {
+        showOverlayIfNeeded()
+        overlayPanel.resetPosition()
+    }
+
+    @objc private func openAccessibilitySettings(_ sender: NSMenuItem) {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func showSettingsWindow() {
+        if settingsWindow == nil {
+            let rootView = SettingsView(
+                preferences: preferences,
+                preview: { [weak self] in
+                    self?.showOverlayIfNeeded()
+                    self?.viewModel.showPreview()
+                },
+                resetPosition: { [weak self] in
+                    self?.showOverlayIfNeeded()
+                    self?.overlayPanel.resetPosition()
+                }
+            )
+
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "KeyStroke Settings"
+            window.contentView = NSHostingView(rootView: rootView)
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.setFrameAutosaveName("KeyStrokeSettings")
+            settingsWindow = window
+        }
+
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showOverlayIfNeeded() {
+        guard !isVisible else { return }
+        isVisible = true
+        overlayPanel.orderFrontRegardless()
+        toggleOverlayItem.title = "Hide Overlay"
     }
 }
