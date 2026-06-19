@@ -15,6 +15,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 # Copy Info.plist
 cp Resources/Info.plist "$APP_BUNDLE/Contents/"
+cp Resources/AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
 
 # Compile
 swiftc \

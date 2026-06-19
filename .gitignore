@@ -1,4 +1,5 @@
 build/
 dist/
+Resources/AppIcon.iconset/
 *.log
 .DS_Store

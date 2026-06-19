@@ -18,6 +18,7 @@ build_app() {
   rm -rf "$APP_BUNDLE"
   mkdir -p "$APP_MACOS" "$APP_RESOURCES"
   cp "$ROOT_DIR/Resources/Info.plist" "$APP_CONTENTS/"
+  cp "$ROOT_DIR/Resources/AppIcon.icns" "$APP_RESOURCES/"
 
   swiftc \
     -o "$APP_BINARY" \
