@@ -1,6 +1,8 @@
 import Cocoa
+import Carbon.HIToolbox
 
 class KeystrokeMonitor {
+    private let systemDefinedEventTypeRawValue: UInt32 = 14
     private let viewModel: KeystrokeViewModel
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -10,7 +12,10 @@ class KeystrokeMonitor {
     }
 
     func start() {
-        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
+        let eventMask: CGEventMask =
+            (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.flagsChanged.rawValue) |
+            (1 << systemDefinedEventTypeRawValue)
 
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo = userInfo else {
@@ -22,6 +27,29 @@ class KeystrokeMonitor {
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 if let tap = monitor.eventTap {
                     CGEvent.tapEnable(tap: tap, enable: true)
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
+            if type == .flagsChanged {
+                let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+                guard keyCode == kVK_CapsLock else {
+                    return Unmanaged.passUnretained(event)
+                }
+
+                DispatchQueue.main.async {
+                    monitor.viewModel.addDisplayKey(KeyMapper.keyName(for: keyCode))
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
+            if type.rawValue == monitor.systemDefinedEventTypeRawValue {
+                guard let mediaKey = KeyMapper.mediaKeyName(from: event) else {
+                    return Unmanaged.passUnretained(event)
+                }
+
+                DispatchQueue.main.async {
+                    monitor.viewModel.addDisplayKey(mediaKey)
                 }
                 return Unmanaged.passUnretained(event)
             }

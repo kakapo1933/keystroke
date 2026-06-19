@@ -1,7 +1,25 @@
 import Carbon.HIToolbox
 import CoreGraphics
+import AppKit
 
 enum KeyMapper {
+    private static let auxControlButtonsSubtype = 8
+    private static let mediaKeyDownState = 0x0A
+
+    private enum NXKeyType {
+        static let soundUp = 0
+        static let soundDown = 1
+        static let brightnessUp = 2
+        static let brightnessDown = 3
+        static let capsLock = 4
+        static let mute = 7
+        static let play = 16
+        static let next = 17
+        static let previous = 18
+        static let illuminationUp = 21
+        static let illuminationDown = 22
+        static let illuminationToggle = 23
+    }
 
     // MARK: - Key name from keycode
 
@@ -13,6 +31,52 @@ enum KeyMapper {
             return alpha
         }
         return "?"
+    }
+
+    static func mediaKeyName(from event: CGEvent) -> String? {
+        guard let nsEvent = NSEvent(cgEvent: event),
+              nsEvent.subtype.rawValue == auxControlButtonsSubtype else {
+            return nil
+        }
+
+        let data = nsEvent.data1
+        let keyType = (data & 0xFFFF0000) >> 16
+        let keyFlags = data & 0x0000FFFF
+        let keyState = (keyFlags & 0xFF00) >> 8
+        guard keyState == mediaKeyDownState else { return nil }
+
+        return mediaKeyName(for: keyType)
+    }
+
+    static func mediaKeyName(for keyType: Int) -> String? {
+        switch keyType {
+        case NXKeyType.soundUp:
+            return "🔊"
+        case NXKeyType.soundDown:
+            return "🔉"
+        case NXKeyType.mute:
+            return "🔇"
+        case NXKeyType.brightnessUp:
+            return "☀︎+"
+        case NXKeyType.brightnessDown:
+            return "☀︎-"
+        case NXKeyType.capsLock:
+            return "⇪"
+        case NXKeyType.play:
+            return "▶︎"
+        case NXKeyType.next:
+            return "⏭"
+        case NXKeyType.previous:
+            return "⏮"
+        case NXKeyType.illuminationUp:
+            return "⌨︎+"
+        case NXKeyType.illuminationDown:
+            return "⌨︎-"
+        case NXKeyType.illuminationToggle:
+            return "⌨︎"
+        default:
+            return nil
+        }
     }
 
     static func isSpecialKey(_ keyCode: Int) -> Bool {
@@ -111,6 +175,7 @@ enum KeyMapper {
         kVK_ForwardDelete:  "⌦",
         kVK_Escape:         "⎋",
         kVK_CapsLock:       "⇪",
+        kVK_Function:       "fn",
 
         kVK_LeftArrow:      "←",
         kVK_RightArrow:     "→",
