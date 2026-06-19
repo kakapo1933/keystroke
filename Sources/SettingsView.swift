@@ -12,23 +12,15 @@ struct SettingsView: View {
 
             Divider()
 
-            Form {
-                Section("Display") {
-                    LabeledContent("Visible keys") {
-                        Stepper("\(preferences.visibleKeyCount)", value: $preferences.visibleKeyCount, in: 1...8)
-                            .monospacedDigit()
-                    }
-
+            VStack(alignment: .leading, spacing: 14) {
+                settingsSection("Display") {
+                    stepperRow("Visible keys", value: $preferences.visibleKeyCount, range: 1...8)
                     Toggle("Show modifiers", isOn: $preferences.showModifiers)
-
-                    LabeledContent("Modifier slots") {
-                        Stepper("\(preferences.visibleModifierCount)", value: $preferences.visibleModifierCount, in: 0...4)
-                            .monospacedDigit()
-                            .disabled(!preferences.showModifiers)
-                    }
+                    stepperRow("Modifier slots", value: $preferences.visibleModifierCount, range: 0...4)
+                        .disabled(!preferences.showModifiers)
                 }
 
-                Section("Appearance") {
+                settingsSection("Appearance") {
                     sliderRow(
                         title: "Background",
                         value: $preferences.keyBackgroundOpacity,
@@ -46,7 +38,7 @@ struct SettingsView: View {
                     )
                 }
 
-                Section("Timing") {
+                settingsSection("Timing") {
                     sliderRow(
                         title: "Hold on screen",
                         value: $preferences.fadeDelay,
@@ -56,7 +48,6 @@ struct SettingsView: View {
                     )
                 }
             }
-            .formStyle(.grouped)
 
             SettingsPreviewStrip(preferences: preferences)
 
@@ -79,7 +70,7 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 520, height: 500)
+        .frame(width: 520, height: 560)
     }
 
     private var header: some View {
@@ -96,6 +87,39 @@ struct SettingsView: View {
             }
 
             Spacer()
+        }
+    }
+
+    private func settingsSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                content()
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+        }
+    }
+
+    private func stepperRow(
+        _ title: String,
+        value: Binding<Int>,
+        range: ClosedRange<Int>
+    ) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Stepper("\(value.wrappedValue)", value: value, in: range)
+                .monospacedDigit()
         }
     }
 
@@ -146,5 +170,6 @@ private struct SettingsPreviewStrip: View {
             .padding(.vertical, 8)
             .padding(.horizontal, 2)
         }
+        .frame(height: CGFloat(preferences.keySize) + 18)
     }
 }
