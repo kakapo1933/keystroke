@@ -2,75 +2,98 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var preferences: KeystrokePreferences
+    @ObservedObject var monitoring: MonitoringController
 
+    let openPermissions: () -> Void
     let preview: () -> Void
     let resetPosition: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             header
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 14) {
-                settingsSection("Display") {
-                    stepperRow("Visible keys", value: $preferences.visibleKeyCount, range: 1...8)
-                    Toggle("Show modifiers", isOn: $preferences.showModifiers)
-                    stepperRow("Modifier slots", value: $preferences.visibleModifierCount, range: 0...4)
-                        .disabled(!preferences.showModifiers)
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    settingsSection("監聽狀態") {
+                        HStack {
+                            Label(monitoring.state.title, systemImage: monitoring.state == .running ? "checkmark.circle.fill" : "pause.circle")
+                            Spacer()
+                            Button(monitoring.state == .paused ? "繼續監聽" : "暫停監聽") { monitoring.togglePause() }
+                            if monitoring.state == .failed || monitoring.state == .waitingForPermission {
+                                Button("重試") { monitoring.retry() }
+                                Button("開啟權限設定", action: openPermissions)
+                            }
+                        }
+                        Text(monitoring.state.detail).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
-                settingsSection("Appearance") {
-                    sliderRow(
-                        title: "Background",
-                        value: $preferences.keyBackgroundOpacity,
-                        range: 0.15...1.0,
-                        step: 0.05,
-                        displayValue: "\(Int(preferences.keyBackgroundOpacity * 100))%"
-                    )
+                    settingsSection("顯示") {
+                        stepperRow("顯示筆數", value: $preferences.visibleKeyCount, range: 1...8)
+                        Toggle("顯示修飾鍵", isOn: $preferences.showModifiers)
+                        Toggle("只顯示快捷鍵", isOn: $preferences.shortcutsOnly)
+                        Text("顯示 ⌘／⌃／⌥ 組合鍵、F1–F20 與媒體鍵；隱藏一般文字與 Shift 單獨輸入。")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
-                    sliderRow(
-                        title: "Key size",
-                        value: $preferences.keySize,
-                        range: 40...72,
-                        step: 1,
-                        displayValue: "\(Int(preferences.keySize)) px"
-                    )
-                }
+                    settingsSection("外觀") {
+                        sliderRow(
+                            title: "背景不透明度",
+                            value: $preferences.keyBackgroundOpacity,
+                            range: 0.15...1.0,
+                            step: 0.05,
+                            displayValue: "\(Int(preferences.keyBackgroundOpacity * 100))%"
+                        )
 
-                settingsSection("Timing") {
-                    sliderRow(
-                        title: "Hold on screen",
-                        value: $preferences.fadeDelay,
-                        range: 0.5...6.0,
-                        step: 0.5,
-                        displayValue: String(format: "%.1f s", preferences.fadeDelay)
-                    )
+                        sliderRow(
+                            title: "按鍵大小",
+                            value: $preferences.keySize,
+                            range: 40...72,
+                            step: 1,
+                            displayValue: "\(Int(preferences.keySize)) px"
+                        )
+                    }
+
+                    settingsSection("時間") {
+                        sliderRow(
+                            title: "停留時間",
+                            value: $preferences.fadeDelay,
+                            range: 0.5...6.0,
+                            step: 0.5,
+                            displayValue: String(format: "%.1f s", preferences.fadeDelay)
+                        )
+                    }
+                    settingsSection("顯示預覽 · \(preferences.visibleKeyCount) 筆") {
+                        SettingsPreviewStrip(preferences: preferences)
+                    }
                 }
+                .padding(.horizontal, 2)
             }
-
-            SettingsPreviewStrip(preferences: preferences)
 
             Divider()
 
             HStack {
                 Button(action: preview) {
-                    Label("Preview Keys", systemImage: "sparkles")
+                    Label("預覽按鍵", systemImage: "sparkles")
                 }
+                .disabled(monitoring.state == .paused)
 
                 Button(action: resetPosition) {
-                    Label("Reset Position", systemImage: "arrow.down.to.line")
+                    Label("重設位置", systemImage: "arrow.down.to.line")
                 }
 
                 Spacer()
 
-                Button("Restore Defaults") {
+                Button("還原預設值") {
                     preferences.restoreDefaults()
                 }
             }
         }
         .padding(20)
-        .frame(width: 520, height: 560)
+        .frame(width: 580, height: 700)
     }
 
     private var header: some View {
@@ -82,7 +105,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("KeyStroke")
                     .font(.title3.weight(.semibold))
-                Text("Overlay Settings")
+                Text("按鍵顯示設定")
                     .foregroundStyle(.secondary)
             }
 
@@ -103,6 +126,7 @@ struct SettingsView: View {
                 content()
             }
             .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(nsColor: .controlBackgroundColor))
@@ -130,9 +154,12 @@ struct SettingsView: View {
         step: Double,
         displayValue: String
     ) -> some View {
-        LabeledContent(title) {
+        HStack {
+            Text(title)
+            Spacer()
             HStack(spacing: 10) {
                 Slider(value: value, in: range, step: step)
+                    .accessibilityLabel(title)
                     .frame(width: 210)
                 Text(displayValue)
                     .monospacedDigit()
@@ -146,36 +173,15 @@ struct SettingsView: View {
 private struct SettingsPreviewStrip: View {
     @ObservedObject var preferences: KeystrokePreferences
 
-    private let modifiers = ["⌃", "⌥", "⇧", "⌘"]
-    private let keys = [
-        KeyDisplayToken.volumeDown,
-        KeyDisplayToken.volumeUp,
-        KeyDisplayToken.playPause,
-        KeyDisplayToken.previousTrack,
-        KeyDisplayToken.nextTrack
-    ]
-
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                if preferences.showModifiers {
-                    ForEach(Array(modifiers.suffix(preferences.visibleModifierCount)), id: \.self) { key in
-                        KeyCapView(text: key, preferences: preferences)
-                    }
-
-                    if preferences.visibleModifierCount > 0 {
-                        Spacer()
-                            .frame(width: 6)
-                    }
-                }
-
-                ForEach(Array(keys.suffix(preferences.visibleKeyCount)), id: \.self) { key in
-                    KeyCapView(text: key, preferences: preferences)
-                }
-            }
+        ScrollView(.horizontal, showsIndicators: true) {
+            KeystrokeStrip(
+                entries: KeystrokeEntry.preview(count: preferences.visibleKeyCount).map(Optional.some),
+                preferences: preferences
+            )
             .padding(.vertical, 8)
             .padding(.horizontal, 2)
         }
-        .frame(height: CGFloat(preferences.keySize) + 18)
+        .frame(height: CGFloat(preferences.keySize) + 30)
     }
 }

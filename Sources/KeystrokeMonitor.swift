@@ -1,7 +1,7 @@
 import Cocoa
 import Carbon.HIToolbox
 
-class KeystrokeMonitor {
+final class KeystrokeMonitor: KeystrokeMonitoring {
     private let systemDefinedEventTypeRawValue: UInt32 = 14
     private let mediaKeyDuplicateWindow: TimeInterval = 0.15
     private let viewModel: KeystrokeViewModel
@@ -9,6 +9,7 @@ class KeystrokeMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var systemDefinedMonitor: Any?
+    private var generation = 0
     private var lastMediaKey: String?
     private var lastMediaKeyTime = Date.distantPast
 
@@ -16,7 +17,15 @@ class KeystrokeMonitor {
         self.viewModel = viewModel
     }
 
-    func start() {
+    var isRunning: Bool {
+        guard let eventTap else { return false }
+        return CFMachPortIsValid(eventTap) && CGEvent.tapIsEnabled(tap: eventTap)
+    }
+
+    func start() -> Bool {
+        if isRunning { return true }
+        stop()
+
         let eventMask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue) |
             (1 << CGEventType.flagsChanged.rawValue) |
@@ -42,8 +51,8 @@ class KeystrokeMonitor {
                     return Unmanaged.passUnretained(event)
                 }
 
-                DispatchQueue.main.async {
-                    monitor.viewModel.addDisplayKey(KeyMapper.keyName(for: keyCode))
+                monitor.enqueue { model in
+                    model.addDisplayKey(KeyMapper.keyName(for: keyCode), isShortcut: false)
                 }
                 return Unmanaged.passUnretained(event)
             }
@@ -60,7 +69,7 @@ class KeystrokeMonitor {
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let flags = event.flags
 
-            // Extract Unicode string from event (supports CJK / IME input)
+            // Event text is a fallback; layout translation is resolved by KeyMapper.
             var actualLength: Int = 0
             var chars = [UniChar](repeating: 0, count: 4)
             event.keyboardGetUnicodeString(
@@ -78,8 +87,8 @@ class KeystrokeMonitor {
             guard KeyMapper.canDisplayKeyDown(keyCode: kc, characters: ch) else {
                 return Unmanaged.passUnretained(event)
             }
-            DispatchQueue.main.async {
-                monitor.viewModel.addKeystroke(keyCode: kc, flags: fl, characters: ch)
+            monitor.enqueue { model in
+                model.addKeystroke(keyCode: kc, flags: fl, characters: ch)
             }
 
             return Unmanaged.passUnretained(event)
@@ -95,32 +104,54 @@ class KeystrokeMonitor {
             callback: callback,
             userInfo: userInfo
         ) else {
-            print("❌ Failed to create event tap.")
-            print("   Grant Accessibility access in System Settings → Privacy & Security → Accessibility")
-            return
+            AppLog.lifecycle.error("Failed to create keyboard event tap")
+            return false
         }
 
         self.eventTap = tap
-        self.runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            stop()
+            AppLog.lifecycle.error("Failed to create keyboard run loop source")
+            return false
+        }
+        self.runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        guard isRunning else {
+            stop()
+            AppLog.lifecycle.error("Keyboard event tap could not be enabled")
+            return false
+        }
         startSystemDefinedMonitor()
-        print("✅ Keystroke monitoring started")
+        AppLog.lifecycle.info("Keyboard event tap started")
+        return true
     }
 
     func stop() {
+        generation += 1
         if let monitor = systemDefinedMonitor {
             NSEvent.removeMonitor(monitor)
         }
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
         }
         if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
         systemDefinedMonitor = nil
         eventTap = nil
         runLoopSource = nil
+        lastMediaKey = nil
+        lastMediaKeyTime = .distantPast
+    }
+
+    private func enqueue(_ deliver: @escaping (KeystrokeViewModel) -> Void) {
+        let currentGeneration = generation
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.generation == currentGeneration, self.isRunning else { return }
+            deliver(self.viewModel)
+        }
     }
 
     private func startSystemDefinedMonitor() {
@@ -143,8 +174,6 @@ class KeystrokeMonitor {
 
         guard !isDuplicate else { return }
 
-        DispatchQueue.main.async { [weak self] in
-            self?.viewModel.addDisplayKey(mediaKey)
-        }
+        enqueue { $0.addDisplayKey(mediaKey) }
     }
 }

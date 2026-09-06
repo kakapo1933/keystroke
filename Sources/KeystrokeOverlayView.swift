@@ -4,8 +4,6 @@ struct KeystrokeOverlayView: View {
     @ObservedObject var viewModel: KeystrokeViewModel
     @ObservedObject var preferences: KeystrokePreferences
 
-    private let slotSpacing: CGFloat = 6
-    private let areaGap: CGFloat = 12
     private let horizontalPadding: CGFloat = 20
 
     var body: some View {
@@ -20,25 +18,7 @@ struct KeystrokeOverlayView: View {
                 }
             }
 
-            HStack(spacing: 0) {
-                if preferences.showModifiers, !viewModel.modifierSlots.isEmpty {
-                    HStack(spacing: slotSpacing) {
-                        ForEach(Array(viewModel.modifierSlots.enumerated()), id: \.offset) { _, content in
-                            FixedSlot(content: content, size: slotSize, preferences: preferences)
-                        }
-                    }
-
-                    if !viewModel.keySlots.isEmpty {
-                        Spacer().frame(width: areaGap)
-                    }
-                }
-
-                HStack(spacing: slotSpacing) {
-                    ForEach(Array(viewModel.keySlots.enumerated()), id: \.offset) { _, content in
-                        FixedSlot(content: content, size: slotSize, preferences: preferences)
-                    }
-                }
-            }
+            KeystrokeStrip(entries: viewModel.entrySlots, preferences: preferences)
             .padding(.horizontal, horizontalPadding)
         }
         .frame(width: panelWidth, height: panelHeight)
@@ -58,12 +38,7 @@ struct KeystrokeOverlayView: View {
     static func panelSize(for preferences: KeystrokePreferences) -> CGSize {
         let keySize = CGFloat(preferences.keySize)
         let slotSize = keySize + 6
-        let visibleModifierCount = preferences.showModifiers ? preferences.visibleModifierCount : 0
-        let keyCount = preferences.visibleKeyCount
-        let modifierWidth = groupWidth(count: visibleModifierCount, slotSize: slotSize)
-        let keyWidth = groupWidth(count: keyCount, slotSize: slotSize)
-        let gap = visibleModifierCount > 0 && keyCount > 0 ? CGFloat(12) : 0
-        let width = modifierWidth + keyWidth + gap + 40
+        let width = groupWidth(count: preferences.visibleKeyCount, slotSize: slotSize) + 40
         let height = max(90, keySize + 40)
 
         return CGSize(width: width, height: height)
@@ -72,10 +47,6 @@ struct KeystrokeOverlayView: View {
     private static func groupWidth(count: Int, slotSize: CGFloat) -> CGFloat {
         guard count > 0 else { return 0 }
         return CGFloat(count) * slotSize + CGFloat(count - 1) * 6
-    }
-
-    private var slotSize: CGFloat {
-        CGFloat(preferences.keySize) + 6
     }
 
     private var panelWidth: CGFloat {
@@ -87,30 +58,47 @@ struct KeystrokeOverlayView: View {
     }
 }
 
-/// 固定位置的 slot 容器：有內容時顯示 KeyCapView，無內容時保留空間
-struct FixedSlot: View {
-    let content: String?
-    let size: CGFloat
+/// Shared by the overlay and settings so slot count and spacing match exactly.
+struct KeystrokeStrip: View {
+    let entries: [KeystrokeEntry?]
     @ObservedObject var preferences: KeystrokePreferences
 
     var body: some View {
-        ZStack {
-            if let key = content {
-                KeyCapView(text: key, preferences: preferences)
-                    .transition(.opacity)
+        HStack(spacing: 6) {
+            ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                ZStack {
+                    if let entry {
+                        KeyCapView(text: entry.key, modifiers: entry.modifiers, preferences: preferences)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(width: CGFloat(preferences.keySize) + 6, height: CGFloat(preferences.keySize) + 6)
             }
         }
-        .frame(width: size, height: size)
     }
 }
 
 struct KeyCapView: View {
     let text: String
+    var modifiers: [String] = []
     @ObservedObject var preferences: KeystrokePreferences
 
     var body: some View {
-        KeyCapContent(text: text, fontSize: fontSize)
+        VStack(spacing: 0) {
+            if preferences.showModifiers, !modifiers.isEmpty {
+                Text(modifiers.joined())
+                    .font(.system(size: keySize * 0.22, weight: .semibold))
+                    .foregroundColor(Color(white: 0.22))
+                    .lineLimit(1)
+                KeyCapContent(text: text, fontSize: fontSize * 0.85)
+                    .frame(height: keySize * 0.48)
+            } else {
+                KeyCapContent(text: text, fontSize: fontSize)
+            }
+        }
             .frame(width: keySize, height: keySize)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel((preferences.showModifiers ? modifiers.joined() : "") + text)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.white.opacity(preferences.keyBackgroundOpacity))

@@ -5,7 +5,7 @@ import Foundation
 final class KeystrokePreferences: ObservableObject {
     private enum Key {
         static let visibleKeyCount = "visibleKeyCount"
-        static let visibleModifierCount = "visibleModifierCount"
+        static let shortcutsOnly = "shortcutsOnly"
         static let keyBackgroundOpacity = "keyBackgroundOpacity"
         static let fadeDelay = "fadeDelay"
         static let keySize = "keySize"
@@ -27,15 +27,8 @@ final class KeystrokePreferences: ObservableObject {
         }
     }
 
-    @Published var visibleModifierCount: Int = 2 {
-        didSet {
-            let clampedValue = Self.clamp(visibleModifierCount, range: 0...4)
-            guard visibleModifierCount == clampedValue else {
-                visibleModifierCount = clampedValue
-                return
-            }
-            defaults.set(visibleModifierCount, forKey: Key.visibleModifierCount)
-        }
+    @Published var shortcutsOnly = false {
+        didSet { defaults.set(shortcutsOnly, forKey: Key.shortcutsOnly) }
     }
 
     @Published var keyBackgroundOpacity: Double = 0.95 {
@@ -83,9 +76,7 @@ final class KeystrokePreferences: ObservableObject {
         if defaults.object(forKey: Key.visibleKeyCount) != nil {
             visibleKeyCount = Self.clamp(defaults.integer(forKey: Key.visibleKeyCount), range: 1...8)
         }
-        if defaults.object(forKey: Key.visibleModifierCount) != nil {
-            visibleModifierCount = Self.clamp(defaults.integer(forKey: Key.visibleModifierCount), range: 0...4)
-        }
+        shortcutsOnly = defaults.bool(forKey: Key.shortcutsOnly)
         if defaults.object(forKey: Key.keyBackgroundOpacity) != nil {
             keyBackgroundOpacity = Self.clamp(defaults.double(forKey: Key.keyBackgroundOpacity), range: 0.15...1.0)
         }
@@ -124,7 +115,7 @@ final class KeystrokePreferences: ObservableObject {
 
     func restoreDefaults() {
         visibleKeyCount = 2
-        visibleModifierCount = 2
+        shortcutsOnly = false
         keyBackgroundOpacity = 0.95
         fadeDelay = 2.0
         keySize = 50.0

@@ -179,6 +179,11 @@ enum KeyMapper {
         return result
     }
 
+    static func isShortcut(keyCode: Int, flags: CGEventFlags) -> Bool {
+        !flags.intersection([.maskCommand, .maskControl, .maskAlternate]).isEmpty
+            || specialKeys[keyCode]?.hasPrefix("F") == true
+    }
+
     static func displayKeys(keyCode: Int, flags: CGEventFlags, characters: String?) -> [String] {
         let hasShift = flags.contains(.maskShift)
         let hasCmd   = flags.contains(.maskCommand)

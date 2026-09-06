@@ -1,39 +1,5 @@
-#!/bin/bash
-set -e
-
-APP_NAME="KeyStroke"
-BUILD_DIR="build"
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-BUNDLE_ID="com.keystroke.app"
-
-# Clean previous build
-rm -rf "$BUILD_DIR"
-
-# Create app bundle structure
-mkdir -p "$APP_BUNDLE/Contents/MacOS"
-mkdir -p "$APP_BUNDLE/Contents/Resources"
-
-# Copy Info.plist
-cp Resources/Info.plist "$APP_BUNDLE/Contents/"
-cp Resources/AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
-
-# Compile
-swiftc \
-    -o "$APP_BUNDLE/Contents/MacOS/$APP_NAME" \
-    -framework AppKit \
-    -framework Carbon \
-    -framework SwiftUI \
-    -swift-version 5 \
-    -target arm64-apple-macos13.0 \
-    Sources/*.swift
-
-# Strip extended attributes & ad-hoc code sign (required for stable Accessibility permission)
-xattr -cr "$APP_BUNDLE"
-codesign --force --sign - --identifier "$BUNDLE_ID" "$APP_BUNDLE"
-
-# Install to /Applications (keep build copy for packaging)
-rm -rf "/Applications/$APP_NAME.app"
-cp -R "$APP_BUNDLE" /Applications/
-
-echo "✅ Build complete & installed to /Applications/$APP_NAME.app"
-echo "Run with: open /Applications/$APP_NAME.app"
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Building never installs or stops the running app. Installation is explicit.
+exec "$ROOT_DIR/script/build_and_run.sh" "${1:---build-only}"

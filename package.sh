@@ -1,40 +1,16 @@
-#!/bin/bash
-set -e
-
-APP_NAME="KeyStroke"
-VERSION="0.2.0"
-BUILD_DIR="build"
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_NAME="$APP_NAME-$VERSION.dmg"
-DMG_DIR="$BUILD_DIR/dmg"
-
-# Step 1: Build the app
-echo "📦 Building $APP_NAME..."
-bash build.sh
-
-# Step 2: Prepare DMG contents
-echo "📀 Creating DMG..."
-rm -rf "$DMG_DIR"
-mkdir -p "$DMG_DIR"
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$ROOT_DIR/script/build_and_run.sh" --build-only
+APP_BUNDLE="$ROOT_DIR/dist/KeyStroke.app"
+VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Contents/Info.plist")
+ARCH=$(/usr/bin/lipo -archs "$APP_BUNDLE/Contents/MacOS/KeyStroke")
+DMG_PATH="$ROOT_DIR/dist/KeyStroke-$VERSION-$ARCH.dmg"
+DMG_DIR=$(mktemp -d "$ROOT_DIR/build/dmg.XXXXXX")
+trap 'rm -rf "$DMG_DIR"' EXIT
 cp -R "$APP_BUNDLE" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-
-# Step 3: Create DMG
-rm -f "$BUILD_DIR/$DMG_NAME"
-hdiutil create \
-    -volname "$APP_NAME" \
-    -srcfolder "$DMG_DIR" \
-    -ov \
-    -format UDZO \
-    "$BUILD_DIR/$DMG_NAME"
-
-# Clean up
-rm -rf "$DMG_DIR"
-
-echo ""
-echo "✅ DMG created: $BUILD_DIR/$DMG_NAME"
-echo ""
-echo "Distribution notes:"
-echo "  • Users open the DMG and drag KeyStroke.app to Applications"
-echo "  • First launch: right-click → Open to bypass Gatekeeper"
-echo "  • Grant Accessibility permission when prompted"
+hdiutil create -volname KeyStroke -srcfolder "$DMG_DIR" -ov -format UDZO "$DMG_PATH"
+hdiutil verify "$DMG_PATH"
+echo "DMG created: $DMG_PATH"
+echo "Local ad-hoc signature; Developer ID signing and notarization are required for public distribution."

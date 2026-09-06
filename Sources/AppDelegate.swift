@@ -1,80 +1,64 @@
 import Cocoa
 import SwiftUI
+import Combine
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var toggleOverlayItem: NSMenuItem!
     private var lockItem: NSMenuItem!
     private var overlayPanel: OverlayPanel!
-    private var monitor: KeystrokeMonitor!
+    private var monitoring: MonitoringController!
+    private var monitoringItem: NSMenuItem!
+    private var pauseItem: NSMenuItem!
+    private var retryItem: NSMenuItem!
+    private var previewItem: NSMenuItem!
+    private var cancellables = Set<AnyCancellable>()
     private var viewModel: KeystrokeViewModel!
     private var preferences: KeystrokePreferences!
     private var settingsWindow: NSWindow?
     private var isVisible = true
     private var isLocked = true
 
-    private let logFile = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Desktop/keystroke/keystroke.log")
-
-    private func log(_ msg: String) {
-        let line = "[\(Date())] \(msg)\n"
-        if let data = line.data(using: .utf8) {
-            try? FileManager.default.createDirectory(
-                at: logFile.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            if FileManager.default.fileExists(atPath: logFile.path) {
-                if let handle = try? FileHandle(forWritingTo: logFile) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                try? data.write(to: logFile)
-            }
-        }
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
-        log("App launched")
-
+        AppLog.lifecycle.notice("App launched")
         preferences = KeystrokePreferences()
         viewModel = KeystrokeViewModel(preferences: preferences)
+        monitoring = MonitoringController(monitor: KeystrokeMonitor(viewModel: viewModel), viewModel: viewModel)
         overlayPanel = OverlayPanel(viewModel: viewModel, preferences: preferences)
         setupStatusBar()
-
-        let trusted = AXIsProcessTrusted()
-        log("AXIsProcessTrusted: \(trusted)")
-
-        if trusted {
-            startMonitoring()
-        } else {
+        monitoring.$state.sink { [weak self] state in self?.updateMonitoringMenu(state) }
+            .store(in: &cancellables)
+        monitoring.start()
+        if !AXIsProcessTrusted() {
             AXIsProcessTrustedWithOptions(
                 [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             )
-            log("Prompted for accessibility, starting poll...")
-            pollForAccessibility()
+        }
+        if ProcessInfo.processInfo.arguments.contains("--settings") {
+            showSettingsWindow()
         }
     }
 
-    private func startMonitoring() {
-        guard monitor == nil else { return }
-        log("Starting keystroke monitor...")
-        monitor = KeystrokeMonitor(viewModel: viewModel)
-        monitor.start()
-        log("Monitor started")
+    func applicationWillTerminate(_ notification: Notification) {
+        monitoring.shutdown()
+        AppLog.lifecycle.notice("App terminating")
     }
 
-    private func pollForAccessibility() {
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
-            let trusted = AXIsProcessTrusted()
-            self?.log("Poll: AXIsProcessTrusted = \(trusted)")
-            if trusted {
-                timer.invalidate()
-                self?.startMonitoring()
-            }
-        }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSettingsWindow()
+        return true
     }
+
+    private func updateMonitoringMenu(_ state: MonitoringController.State) {
+        monitoringItem.title = state.title
+        pauseItem.title = state == .paused ? "繼續監聽" : "暫停監聽"
+        retryItem.isHidden = state == .running || state == .paused
+        previewItem.isEnabled = state != .paused
+        statusItem.button?.toolTip = "KeyStroke — " + state.title
+    }
+
+    @objc private func togglePause(_ sender: NSMenuItem) { monitoring.togglePause() }
+    @objc private func retryMonitoring(_ sender: NSMenuItem) { monitoring.retry() }
 
     // MARK: - Menu Bar
 
@@ -88,16 +72,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        menu.autoenablesItems = false
+        monitoringItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        monitoringItem.isEnabled = false
+        menu.addItem(monitoringItem)
+        pauseItem = NSMenuItem(title: "暫停監聽", action: #selector(togglePause), keyEquivalent: "")
+        menu.addItem(pauseItem)
+        retryItem = NSMenuItem(title: "重試監聽", action: #selector(retryMonitoring), keyEquivalent: "")
+        menu.addItem(retryItem)
+        menu.addItem(.separator())
 
         toggleOverlayItem = NSMenuItem(
-            title: "Hide Overlay",
+            title: "隱藏浮層",
             action: #selector(toggleOverlay),
             keyEquivalent: "h"
         )
         menu.addItem(toggleOverlayItem)
 
         lockItem = NSMenuItem(
-            title: "Unlock Position",
+            title: "解鎖位置",
             action: #selector(toggleLock),
             keyEquivalent: "l"
         )
@@ -105,26 +98,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        menu.addItem(NSMenuItem(
-            title: "Preview Keys",
-            action: #selector(previewKeys),
-            keyEquivalent: "p"
-        ))
+        previewItem = NSMenuItem(title: "預覽按鍵", action: #selector(previewKeys), keyEquivalent: "p")
+        menu.addItem(previewItem)
 
         menu.addItem(NSMenuItem(
-            title: "Reset Position",
+            title: "重設位置",
             action: #selector(resetPosition),
             keyEquivalent: "r"
         ))
 
         menu.addItem(NSMenuItem(
-            title: "Settings...",
+            title: "設定⋯",
             action: #selector(openSettings),
             keyEquivalent: ","
         ))
 
         menu.addItem(NSMenuItem(
-            title: "Accessibility...",
+            title: "輔助使用權限⋯",
             action: #selector(openAccessibilitySettings),
             keyEquivalent: ""
         ))
@@ -132,7 +122,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
 
         menu.addItem(NSMenuItem(
-            title: "Quit KeyStroke",
+            title: "結束 KeyStroke",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         ))
@@ -144,17 +134,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isVisible.toggle()
         if isVisible {
             overlayPanel.orderFrontRegardless()
-            sender.title = "Hide Overlay"
+            sender.title = "隱藏浮層"
         } else {
             overlayPanel.orderOut(nil)
-            sender.title = "Show Overlay"
+            sender.title = "顯示浮層"
         }
     }
 
     @objc private func toggleLock(_ sender: NSMenuItem) {
         isLocked.toggle()
         overlayPanel.setLocked(isLocked)
-        sender.title = isLocked ? "Unlock Position" : "Lock Position"
+        sender.title = isLocked ? "解鎖位置" : "鎖定位置"
     }
 
     @objc private func openSettings(_ sender: NSMenuItem) {
@@ -182,6 +172,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindow == nil {
             let rootView = SettingsView(
                 preferences: preferences,
+                monitoring: monitoring,
+                openPermissions: { [weak self] in self?.openAccessibilitySettings(NSMenuItem()) },
                 preview: { [weak self] in
                     self?.showOverlayIfNeeded()
                     self?.viewModel.showPreview()
@@ -193,12 +185,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+                contentRect: NSRect(x: 0, y: 0, width: 580, height: 680),
                 styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,
                 defer: false
             )
-            window.title = "KeyStroke Settings"
+            window.title = "KeyStroke 設定"
             window.contentView = NSHostingView(rootView: rootView)
             window.isReleasedWhenClosed = false
             window.center()
@@ -214,6 +206,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard !isVisible else { return }
         isVisible = true
         overlayPanel.orderFrontRegardless()
-        toggleOverlayItem.title = "Hide Overlay"
+        toggleOverlayItem.title = "隱藏浮層"
     }
 }
